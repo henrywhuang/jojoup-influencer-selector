@@ -834,8 +834,7 @@
         </div>
       </div>
       <div class="top-actions">
-        <input id="csvInput" type="file" accept=".csv,text/csv" hidden />
-        <button class="btn" id="importButton" title="导入星图导出的飞书表格或CSV"><i data-lucide="upload"></i>导入名单</button>
+        <button class="btn" id="captureButton" title="查看星图页面采集方式"><i data-lucide="scan-line"></i>星图采集</button>
         <button class="btn" id="exportButton" title="导出当前推荐清单"><i data-lucide="download"></i>导出清单</button>
         <button class="btn primary" id="recalcButton" title="按当前筛选策略重新计算"><i data-lucide="refresh-cw"></i>重新评分</button>
       </div>
@@ -845,9 +844,9 @@
       <article class="source-card">
         <div class="source-title">
           <span>星图达人广场</span>
-          <span class="status ready">可导入</span>
+          <span class="status ready">可采集</span>
         </div>
-        <p>承接星图筛选项、昵称、星图ID、报价、行业商单经验和达人主页信息。</p>
+        <p>你登录星图后，我从当前可见的列表、卡片和详情页读取达人基础信息。</p>
       </article>
       <article class="source-card">
         <div class="source-title">
@@ -878,12 +877,12 @@
         <p><strong>不是找最红达人，</strong>而是在预算内最大化“初中生/家长有效触达 × 信任 × 行动意愿”，同时压低竞品干扰、合规和数据不确定性。</p>
       </article>
       <article class="audit-card">
-        <h3>可直接获取</h3>
-        <p>星图筛选/导出、达人ID、报价、商单经验、人群包覆盖/匹配、合作后传播与人群资产报告。</p>
+        <h3>星图采集流程</h3>
+        <p>你登录星图并打开达人广场、人群包结果或达人详情页；我只读取当前页面可见内容，生成候选池与评分建议。</p>
       </article>
       <article class="audit-card">
-        <h3>只能推断</h3>
-        <p>竞品饱和、真实转化、孩子/家长决策链影响，需要用公开内容、历史投后和小预算测试校验。</p>
+        <h3>采集边界</h3>
+        <p>不读取密码，不绕过平台权限，不假设隐藏接口。未在页面展示、未授权或投后才有的数据，只能标为缺口。</p>
       </article>
       <article class="audit-card">
         <h3>工具防错</h3>
@@ -1561,186 +1560,6 @@
       $("#weightTotal").textContent = `${total}%`;
     }
 
-    function parseNumber(value, fallback = 0) {
-      if (value === undefined || value === null || value === "") return fallback;
-      const cleaned = String(value).replace(/[,%\s万wW元]/g, "");
-      const parsed = Number(cleaned);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    }
-
-    function parsePercent(value, fallback = null) {
-      if (value === undefined || value === null || value === "") return fallback;
-      const parsed = parseNumber(value, fallback);
-      if (parsed === fallback) return fallback;
-      return parsed <= 1 ? parsed * 100 : parsed;
-    }
-
-    function splitList(value) {
-      return String(value || "")
-        .split(/[;,，、\s]+/)
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-
-    function parseCsv(text) {
-      const rowsOut = [];
-      let row = [];
-      let cell = "";
-      let inQuotes = false;
-
-      for (let i = 0; i < text.length; i += 1) {
-        const char = text[i];
-        const next = text[i + 1];
-        if (char === '"' && inQuotes && next === '"') {
-          cell += '"';
-          i += 1;
-        } else if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === "," && !inQuotes) {
-          row.push(cell);
-          cell = "";
-        } else if ((char === "\n" || char === "\r") && !inQuotes) {
-          if (char === "\r" && next === "\n") i += 1;
-          row.push(cell);
-          if (row.some((item) => item.trim() !== "")) rowsOut.push(row);
-          row = [];
-          cell = "";
-        } else {
-          cell += char;
-        }
-      }
-
-      row.push(cell);
-      if (row.some((item) => item.trim() !== "")) rowsOut.push(row);
-      if (rowsOut.length < 2) return [];
-
-      const headers = rowsOut[0].map((header) => header.replace(/^\uFEFF/, "").trim());
-      return rowsOut.slice(1).map((values) => {
-        const entry = {};
-        headers.forEach((header, index) => {
-          entry[header] = (values[index] || "").trim();
-        });
-        return entry;
-      });
-    }
-
-    function firstValue(row, keys) {
-      for (const key of keys) {
-        if (row[key] !== undefined && row[key] !== "") return row[key];
-      }
-      return "";
-    }
-
-    function averageAvailable(values, fallback) {
-      const available = values.filter((value) => value !== null && value !== undefined && Number.isFinite(value));
-      if (!available.length) return fallback;
-      return available.reduce((sum, value) => sum + value, 0) / available.length;
-    }
-
-    function inferTarget(angle, tags) {
-      const text = `${angle} ${tags.join(" ")}`;
-      if (/混合|亲子|老师/.test(text)) return "mixed";
-      if (/孩子|学生|校园|初中生/.test(text)) return "student";
-      return "parent";
-    }
-
-    function inferGrades(text) {
-      const grades = ["初一", "初二", "初三"].filter((grade) => text.includes(grade));
-      if (/中考|初三/.test(text) && !grades.includes("初三")) grades.push("初三");
-      return grades.length ? grades : ["初一", "初二", "初三"];
-    }
-
-    function buildCreatorFromRow(row, index) {
-      const tags = splitList(firstValue(row, ["内容标签", "标签", "达人标签"]));
-      const note = firstValue(row, ["备注", "说明"]);
-      const angle = firstValue(row, ["内容切角", "切角", "人群切角"]);
-      const source = firstValue(row, ["数据来源", "指标来源", "source"]);
-      const permission = firstValue(row, ["权限状态", "数据权限", "permission"]);
-      const dateRange = firstValue(row, ["数据周期", "date_range"]);
-      const updatedAt = firstValue(row, ["更新时间", "updated_at"]);
-      const sampleSize = parseNumber(firstValue(row, ["样本作品数", "sample_size"]));
-      const complianceNote = firstValue(row, ["合规风险词", "合规备注", "compliance_note"]);
-      const allText = `${tags.join(" ")} ${note} ${angle}`;
-      const avgPlay = parseNumber(firstValue(row, ["近30日均播w", "近30日均播", "近30天均播w"]));
-      const interaction = parsePercent(firstValue(row, ["互动率", "近30日互动率"]));
-      const completion = parsePercent(firstValue(row, ["完播率", "近30日完播率"]));
-      const quote = parseNumber(firstValue(row, ["报价w", "单条报价w", "报价"]), 2.5);
-      const cpm = parseNumber(firstValue(row, ["预估CPM", "CPM"]), 35);
-      const parentAudience = parsePercent(firstValue(row, ["家长观众占比官方", "家长观众占比估算", "家长观众占比", "家长占比"]));
-      const juniorContent = parsePercent(firstValue(row, ["初中相关内容占比官方", "初中相关内容占比估算", "初中相关内容占比", "初中内容占比"]));
-      const coverage = parsePercent(firstValue(row, ["人群包覆盖度官方", "人群包覆盖度", "TA覆盖度"]));
-      const match = parsePercent(firstValue(row, ["达人观众匹配度官方", "达人观众匹配度", "观众匹配度"]));
-      const a3Users = parseNumber(firstValue(row, ["A3新增用户", "A3新增"]));
-      const a3Cost = parseNumber(firstValue(row, ["新增A3成本", "A3成本"]));
-      const competitorCount = parseNumber(firstValue(row, ["竞品合作次数90天", "90天竞品次数"]));
-      const riskInput = firstValue(row, ["风险标签", "风险"]);
-      const risk = riskInput || (competitorCount >= 4 ? "高" : competitorCount >= 2 ? "中" : "低");
-      const propagation = clamp(50 + Math.log10(avgPlay + 1) * 20 + averageAvailable([interaction, completion], 18) * 0.28, 45, 96);
-      const audience = clamp(45 + averageAvailable([parentAudience, juniorContent, coverage, match], 52) * 0.55, 45, 95);
-      const commercial = clamp(68 + (a3Users > 0 ? 8 : 0) + (a3Cost > 0 && a3Cost <= 30 ? 7 : 0) + (cpm <= 30 ? 6 : cpm >= 45 ? -6 : 0) + (quote <= 2 ? 3 : 0), 45, 94);
-      const competition = clamp(92 - competitorCount * 12 - (risk === "高" ? 12 : risk === "中" ? 5 : 0), 38, 96);
-      const content = clamp(72 + (/全科|多学科/.test(allText) ? 10 : 0) + (/初中|中考|初一|初二|初三/.test(allText) ? 7 : 0) + (/老师|班主任|家长/.test(allText) ? 4 : 0) - (/单科|只讲英语|只讲数学/.test(allText) ? 5 : 0), 45, 94);
-      const id = firstValue(row, ["达人id", "达人ID", "达人Id", "creator_id"]) || `IMP-${String(index + 1).padStart(3, "0")}`;
-      const xt = firstValue(row, ["星图id", "星图ID"]);
-      const dy = firstValue(row, ["抖音链接", "抖音主页", "douyin_url"]);
-      const name = firstValue(row, ["昵称", "达人昵称", "name"]) || id;
-      const competitor = competitorCount > 0 ? `近90天竞品合作${competitorCount}次` : "未见教育APP高频投放";
-      const safeTags = tags.length ? tags : ["待补标签"];
-      const target = inferTarget(angle, safeTags);
-
-      return {
-        id: xt ? `XT-${xt.replace(/^XT-/, "")}` : id,
-        dy: dy || "待补抖音链接",
-        name,
-        fans: parseNumber(firstValue(row, ["粉丝数w", "粉丝数", "粉丝w"]), 0),
-        quote,
-        target,
-        grades: inferGrades(allText),
-        tags: safeTags,
-        propagation: Math.round(propagation),
-        audience: Math.round(audience),
-        commercial: Math.round(commercial),
-        competition: Math.round(competition),
-        content: Math.round(content),
-        cpm,
-        a3: a3Users > 0 ? `A3新增${a3Users}，成本${a3Cost || "待补"}` : "待投后验证",
-        risk,
-        competitor,
-        source,
-        permission,
-        dateRange,
-        updatedAt,
-        sampleSize,
-        complianceNote,
-        recent: avgPlay ? `近30日均播${avgPlay}w，互动率${interaction || "待补"}%` : "近期传播数据待补",
-        reason: [
-          target === "student" ? "学生触达需用测试预算验证" : "家长/老师决策链更清晰",
-          a3Users > 0 ? "已有A3信号" : "缺投后商业样本",
-          competitorCount > 1 ? "竞品频次需人工确认" : "竞品干扰相对可控"
-        ],
-        brief: angle ? `建议围绕${angle}切入，先用小预算验证真实转化，再扩大投放。` : "建议先补内容切角和近30天公开视频表现，再进入邀约决策。"
-      };
-    }
-
-    function importCsvFile(file) {
-      file.text().then((text) => {
-        const imported = parseCsv(text).map(buildCreatorFromRow).filter(Boolean);
-        imported.forEach((creator) => {
-          const existingIndex = creators.findIndex((item) => item.id === creator.id || (creator.dy !== "待补抖音链接" && item.dy === creator.dy));
-          if (existingIndex >= 0) {
-            creators[existingIndex] = creator;
-          } else {
-            creators.push(creator);
-          }
-        });
-        state.selectedId = imported[0]?.id || state.selectedId;
-        render();
-        window.alert(`已导入 ${imported.length} 个达人，重复ID已覆盖。`);
-      }).catch(() => {
-        window.alert("CSV读取失败，请检查文件编码或格式。");
-      });
-    }
-
     function csvValue(value) {
       const text = String(value ?? "");
       return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
@@ -1797,12 +1616,8 @@
       if (window.lucide) window.lucide.createIcons();
     }
 
-    $("#importButton").addEventListener("click", () => $("#csvInput").click());
-
-    $("#csvInput").addEventListener("change", (event) => {
-      const file = event.target.files?.[0];
-      if (file) importCsvFile(file);
-      event.target.value = "";
+    $("#captureButton").addEventListener("click", () => {
+      window.alert("请先登录星图并打开达人广场、搜索结果、人群包结果或达人详情页；随后告诉我“开始抓取”。我会用项目内 tools/xingtu-visible-capture.js 读取当前页面可见数据。");
     });
 
     $("#exportButton").addEventListener("click", exportCurrentList);
